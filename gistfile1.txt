@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Пасхальный Аттрактор</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            /* Динамический маппинг переменных окружения Telegram с фоллбэками */
+            --bg: var(--tg-theme-bg-color, #0d1117);
+            --text: var(--tg-theme-text-color, #c9d1d9);
+            --hint: var(--tg-theme-hint-color, #8b949e);
+            --link: var(--tg-theme-link-color, #58a6ff);
+            --btn-bg: var(--tg-theme-button-color, #238636);
+            --btn-text: var(--tg-theme-button-text-color, #ffffff);
+            --ui-bg: var(--tg-theme-secondary-bg-color, #161b22);
+            --border: var(--tg-theme-hint-color, #30363d);
+        }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: var(--ui-bg);
+            opacity: 0.95;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            min-width: 240px;
+            box-sizing: border-box;
+            z-index: 100;
+        }
+        button {
+            background: var(--btn-bg);
+            color: var(--btn-text);
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: inherit;
+            margin-top: 12px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+        button:active {
+            opacity: 0.7;
+        }
+        canvas {
+            display: block;
+        }
+        input[type=range] {
+            width: 100px;
+            accent-color: var(--link);
+            margin: 0;
+            padding: 0;
+        }
+        .ui-row {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--hint);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <b style="font-size:14px">Топология (Telegram App)</b><br><br>
+        Год: <span id="y" style="color:var(--link); font-size:16px; font-weight:bold">2026</span><br><br>
+        <span id="co" style="color:var(--text); font-size:12px; font-weight:bold">X: -- | Y: --</span><br><br>
+        <span style="color:var(--hint); font-size:10px">
+            ОСЬ X (Православная): % от года<br>
+            ОСЬ Y (Католическая): % от года
+        </span>
+        <button id="b">СТАРТ</button>
+        <div class="ui-row">
+            <span>Скорость: <b id="sv" style="color:var(--text)">5</b></span>
+            <input type="range" id="sp" min="1" max="100" value="5">
+        </div>
+    </div>
+    
+    <canvas id="c"></canvas>
+
+    <script>
+        // Инициализация моста Telegram
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Форсирование открытия на весь экран
+        tg.ready();  // Сигнал клиенту о готовности DOM
+
+        // Извлечение нативных цветов для Canvas
+        const bgHex = tg.themeParams.bg_color || "#0d1117";
+        const gridHex = tg.themeParams.hint_color || "#1e252e";
+
+        const cv = document.getElementById("c");
+        const cx = cv.getContext("2d");
+        const ye = document.getElementById("y");
+        const co = document.getElementById("co");
+        const bt = document.getElementById("b");
+        const ui = document.getElementById("ui");
+        const sp = document.getElementById("sp");
+        const sv = document.getElementById("sv");
+
+        let w, h, run = false, cY = 2026, hist = [], bx1, by1, bx2, by2, isAnim = false, speed = 5;
+
+        sp.oninput = function() {
+            speed = parseInt(sp.value);
+            sv.innerText = speed;
+            // Аппаратный отклик ползунка (Haptic Feedback)
+            if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+        };
+
+        function gO(y) {
+            let a = y % 19, b = y % 4, c = y % 7, d = (19 * a + 15) % 30, e = (2 * b + 4 * c + 6 * d + 6) % 7;
+            let dr = Math.floor(y / 100) - Math.floor(y / 400) - 2;
+            return 81 + d + e + dr;
+        }
+
+        function gC(y) {
+            let a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+            let f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+            let h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+            let l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+            let mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
+            return mo === 3 ? 59 + da : 90 + da;
+        }
+
+        function rs() {
+            w = cv.width = window.innerWidth;
+            h = cv.height = window.innerHeight;
+            let uB = ui.getBoundingClientRect(), p = 30;
+            
+            if (w > h) {
+                bx1 = uB.right + p; by1 = h - p; bx2 = w - p; by2 = p;
+            } else {
+                bx1 = p; by1 = h - p; bx2 = w - p; by2 = uB.bottom + p;
+            }
+            cx.fillStyle = bgHex;
+            cx.fillRect(0, 0, w, h);
+        }
+
+        window.addEventListener("resize", function() {
+            if (run) rs();
+        });
+
+        function mp(v, m1, m2, o1, o2) {
+            return (v - m1) * (o2 - o1) / (m2 - m1) + o1;
+        }
+
+        function dtF(v) {
+            let m = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            let n = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+            let d = v, i = 0;
+            while (d > m[i] && i < 11) { d -= m[i]; i++; }
+            return Math.floor(d) + " " + n[i];
+        }
+
+        function setT(y) {
+            let dO = gO(y) % 365, dC = gC(y) % 365;
+            let pxO = (dO / 365) * 100, pxC = (dC / 365) * 100;
+            ye.innerText = y;
+            co.innerText = "X: " + pxO.toFixed(1) + "% (" + dtF(dO) + ")\nY: " + pxC.toFixed(1) + "% (" + dtF(dC) + ")";
+        }
+
+        function tk() {
+            if (!run) { isAnim = false; return; }
+            
+            cx.fillStyle = bgHex;
+            cx.fillRect(0, 0, w, h);
+            
+            cx.strokeStyle = gridHex;
+            cx.lineWidth = 1;
+            cx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                let pxx = mp(i * 10, 0, 100, bx1, bx2);
+                let pyy = mp(i * 10, 0, 100, by1, by2);
+                cx.moveTo(pxx, by1); cx.lineTo(pxx, by2);
+                cx.moveTo(bx1, pyy); cx.lineTo(bx2, pyy);
+            }
+            cx.stroke();
+
+            for (let s = 0; s < speed; s++) {
+                let dO = gO(cY) % 365, dC = gC(cY) % 365;
+                let pxO = (dO / 365) * 100, pxC = (dC / 365) * 100;
+                let tX = mp(pxO, 0, 100, bx1, bx2), tY = mp(pxC, 0, 100, by1, by2);
+                
+                hist.push({ x: tX, y: tY, u: (cY % 532) / 532 * 360 });
+                if (hist.length > 3000) hist.shift();
+                cY++;
+            }
+
+            let len = hist.length;
+            for (let i = 0; i < len; i++) {
+                let pt = hist[i], age = len - i;
+                
+                if (age > 100) {
+                    cx.fillStyle = gridHex;
+                    cx.globalAlpha = 0.25;
+                    cx.fillRect(pt.x - 1, pt.y - 1, 2, 2);
+                    cx.globalAlpha = 1.0;
+                } else {
+                    if (i > 0 && Math.abs(pt.x - hist[i - 1].x) < w / 2 && Math.abs(pt.y - hist[i - 1].y) < h / 2) {
+                        cx.beginPath();
+                        cx.moveTo(hist[i - 1].x, hist[i - 1].y);
+                        cx.lineTo(pt.x, pt.y);
+                        cx.strokeStyle = `hsla(${pt.u}, 100%, 65%, ${1 - age / 100})`;
+                        cx.lineWidth = 1.5;
+                        cx.stroke();
+                    }
+                    cx.beginPath();
+                    cx.arc(pt.x, pt.y, 2.5, 0, 6.28);
+                    cx.fillStyle = `hsla(${pt.u}, 100%, 65%, ${1 - age / 100})`;
+                    cx.fill();
+                }
+            }
+
+            if (len > 0) {
+                cx.beginPath();
+                cx.arc(hist[len - 1].x, hist[len - 1].y, 4, 0, 6.28);
+                cx.fillStyle = "#ffffff";
+                cx.fill();
+            }
+            
+            setT(cY - 1);
+            requestAnimationFrame(tk);
+        }
+
+        bt.onclick = function() {
+            run = !run;
+            bt.innerText = run ? "ПАУЗА" : "СТАРТ";
+            bt.style.background = run ? "#da3633" : "var(--btn-bg)";
+            
+            // Аппаратный отклик при нажатии
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred(run ? "medium" : "light");
+            
+            if (run) {
+                if (!isAnim) {
+                    if (w === undefined) { rs(); setT(cY); }
+                    isAnim = true;
+                    requestAnimationFrame(tk);
+                }
+            }
+        };
+    </script>
+</body>
+</html>
