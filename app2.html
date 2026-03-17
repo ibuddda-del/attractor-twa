@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Кинематика Пасхалии (Aero Time-Scaled)</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-grad-1: #20261a;
+            --bg-grad-2: #090a08;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #ffffff;
+            --text-dim: rgba(255, 255, 255, 0.5);
+            --accent: #eab308;
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-grad-2);
+            background-image: radial-gradient(circle at 70% 30%, var(--bg-grad-1) 0%, var(--bg-grad-2) 100%);
+            color: var(--text-main);
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior: none;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        
+        #bg { z-index: 1; opacity: 0.6; } 
+        #fg { z-index: 2; }
+
+        .glass-panel {
+            position: absolute;
+            z-index: 10;
+            bottom: calc(var(--safe-bottom) + 32px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 64px);
+            max-width: 760px; 
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 32px;
+            box-sizing: border-box;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: auto;
+        }
+
+        @media (max-width: 768px) {
+            .glass-panel {
+                bottom: calc(var(--safe-bottom) + 16px);
+                left: 16px;
+                transform: none;
+                width: calc(100% - 32px);
+                max-width: none;
+                padding: 24px 20px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 24px;
+            }
+        }
+
+        .col-left {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 320px;
+        }
+
+        .tag {
+            font-size: 11px;
+            color: var(--accent);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .hero-title {
+            font-size: 48px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            color: var(--text-main);
+            margin: 4px 0 12px 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .dot { color: var(--accent); }
+
+        .paragraph {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+
+        .col-right {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 260px;
+        }
+
+        @media (max-width: 768px) {
+            .col-right { width: 100%; min-width: auto; gap: 16px; }
+        }
+
+        .ref-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .ref-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .ref-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+
+        .ref-value {
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 600;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .control-area {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            margin: 4px 0;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px; width: 14px;
+            border-radius: 50%;
+            background: var(--text-main);
+            margin-top: -6px;
+            cursor: pointer;
+        }
+
+        .play-btn {
+            background: var(--accent);
+            color: #000000;
+            border: none;
+            border-radius: 8px;
+            padding: 14px 24px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: lowercase;
+            transition: all 0.2s;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(234, 179, 8, 0.2);
+        }
+
+        .play-btn:active {
+            transform: scale(0.98);
+        }
+
+        .play-btn.running {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bg"></canvas>
+    <canvas id="fg"></canvas>
+
+    <div class="glass-panel">
+        <div class="col-left">
+            <div class="tag">#хронология</div>
+            <div class="hero-title">год <span id="y">2026</span><span class="dot">.</span></div>
+            <div class="paragraph">
+                X: Православный предикат.<br>
+                Y: Католический базис.<br>
+                Смещение алгоритмов: <span id="delta" style="color:var(--text-main); font-weight:600">--</span> дн.
+            </div>
+        </div>
+
+        <div class="col-right">
+            <div class="ref-grid">
+                <div class="ref-block">
+                    <div class="ref-label">x-вектор</div>
+                    <div class="ref-value" id="valO">--</div>
+                </div>
+                <div class="ref-block">
+                    <div class="ref-label">y-вектор</div>
+                    <div class="ref-value" id="valC">--</div>
+                </div>
+                <div class="ref-block">
+                    <div class="ref-label">индиктион</div>
+                    <div class="ref-value" style="color:var(--text-main)" id="indiction">--</div>
+                </div>
+            </div>
+            
+            <div class="control-area">
+                <div class="ref-block">
+                    <div class="ref-label" style="display:flex; justify-content:space-between;">
+                        <span>скорость интеграции</span>
+                        <span id="sv" style="color:var(--text-main); font-weight:600; font-variant-numeric:tabular-nums;">1.0 год/сек</span>
+                    </div>
+                    <input type="range" id="sp" min="0" max="100" value="0">
+                </div>
+                <button id="b" class="play-btn">запустить поток</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const Engine = {
+            bg: document.getElementById('bg'),
+            fg: document.getElementById('fg'),
+            ctxBg: document.getElementById('bg').getContext('2d'), // Флаг alpha: false удален
+            ctxFg: document.getElementById('fg').getContext('2d'),
+            w: 0, h: 0, padX: 0, padTop: 0, padBottom: 0,
+            
+            run: false, 
+            year: 2026, 
+            
+            // Архитектура Дельта-тайминга
+            yps: 1, // Years Per Second (Изначально 1 год в секунду)
+            accumulator: 0, // Накопитель дробных шагов
+            lastTime: 0,
+            
+            history: [], 
+            maxHistory: 3000,
+            
+            ui: {
+                year: document.getElementById('y'),
+                delta: document.getElementById('delta'),
+                valO: document.getElementById('valO'),
+                valC: document.getElementById('valC'),
+                indiction: document.getElementById('indiction'),
+                btn: document.getElementById('b'),
+                slider: document.getElementById('sp'),
+                speedVal: document.getElementById('sv')
+            },
+            
+            monthsDOY: [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334],
+            monthNames: ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+        };
+
+        function initTelegram() {
+            try {
+                if (window.Telegram && window.Telegram.WebApp) {
+                    const tg = window.Telegram.WebApp;
+                    tg.ready();
+                    tg.expand();
+                    tg.disableVerticalSwipes();
+                }
+            } catch (e) {}
+        }
+
+        function calcOrthodox(y) {
+            let a = y % 19, b = y % 4, c = y % 7;
+            let d = (19 * a + 15) % 30, e = (2 * b + 4 * c + 6 * d + 6) % 7;
+            let drift = Math.floor(y / 100) - Math.floor(y / 400) - 2;
+            return 81 + d + e + drift;
+        }
+
+        function calcCatholic(y) {
+            let a = y % 19, b = Math.floor(y / 100), c = y % 100;
+            let d = Math.floor(b / 4), e = b % 4;
+            let f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+            let h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+            let l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+            let month = Math.floor((h + l - 7 * m + 114) / 31);
+            let day = ((h + l - 7 * m + 114) % 31) + 1;
+            return month === 3 ? 59 + day : 90 + day;
+        }
+
+        function formatDOY(doy) {
+            let d = doy, mIdx = 0;
+            const months = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            while (d > months[mIdx] && mIdx < 11) { d -= months[mIdx]; mIdx++; }
+            return `${Math.floor(d).toString().padStart(2, '0')} ${Engine.monthNames[mIdx]}`;
+        }
+
+        function formatSpeed(yps) {
+            if (yps < 10) return yps.toFixed(1) + ' год/сек';
+            return Math.round(yps).toLocaleString('ru-RU') + ' год/сек';
+        }
+
+        function map(val, inMin, inMax, outMin, outMax) {
+            return (val - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+        }
+
+        function drawBackground() {
+            const ctx = Engine.ctxBg, w = Engine.w, h = Engine.h;
+            const px = Engine.padX, pt = Engine.padTop, pb = Engine.padBottom;
+
+            ctx.clearRect(0, 0, w, h);
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+            ctx.lineWidth = 1;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+            ctx.font = "10px ui-monospace, SFMono-Regular, monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            for (let i = 0; i < 12; i++) {
+                let pct = (Engine.monthsDOY[i] / 365) * 100;
+                let gridX = map(pct, 0, 100, px, w - px);
+                let gridY = map(pct, 0, 100, h - pb, pt); 
+
+                ctx.beginPath();
+                ctx.moveTo(gridX, pt); ctx.lineTo(gridX, h - pb);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(px, gridY); ctx.lineTo(w - px, gridY);
+                ctx.stroke();
+
+                ctx.fillText(Engine.monthNames[i], gridX, h - pb + 16);
+                ctx.fillText(Engine.monthNames[i], px - 20, gridY);
+            }
+        }
+
+        function resize() {
+            Engine.w = window.innerWidth;
+            Engine.h = window.innerHeight;
+            if (!Engine.w || !Engine.h) return false;
+
+            Engine.bg.width = Engine.fg.width = Engine.w;
+            Engine.bg.height = Engine.fg.height = Engine.h;
+            
+            let isMobile = Engine.w <= 768;
+            Engine.padX = isMobile ? 40 : 80;
+            Engine.padTop = 60;
+            Engine.padBottom = isMobile ? 320 : 240; 
+            
+            drawBackground();
+            if (!Engine.run) renderForeground();
+            return true;
+        }
+
+        function updateTelemetry(y, dO, dC, pctO, pctC) {
+            Engine.ui.year.innerText = y;
+            Engine.ui.valO.innerText = formatDOY(dO);
+            Engine.ui.valC.innerText = formatDOY(dC);
+            
+            let deltaDays = Math.abs(dO - dC);
+            Engine.ui.delta.innerText = deltaDays;
+
+            let ind = y % 532;
+            Engine.ui.indiction.innerText = `${ind === 0 ? 532 : ind}/532`;
+        }
+
+        function tickLogic() {
+            let dO = calcOrthodox(Engine.year) % 365;
+            let dC = calcCatholic(Engine.year) % 365;
+            let pctO = (dO / 365) * 100;
+            let pctC = (dC / 365) * 100;
+
+            Engine.history.push({ px: pctO, py: pctC });
+            if (Engine.history.length > Engine.maxHistory) Engine.history.shift();
+            
+            updateTelemetry(Engine.year, dO, dC, pctO, pctC);
+            Engine.year++;
+        }
+
+        function renderForeground() {
+            const ctx = Engine.ctxFg, w = Engine.w, h = Engine.h;
+            const px = Engine.padX, pt = Engine.padTop, pb = Engine.padBottom;
+            const len = Engine.history.length;
+
+            ctx.clearRect(0, 0, w, h);
+            if (len === 0) return;
+
+            for (let i = 0; i < len; i++) {
+                let node = Engine.history[i], age = len - i;
+                let screenX = map(node.px, 0, 100, px, w - px);
+                let screenY = map(node.py, 0, 100, h - pb, pt);
+
+                if (age > 200) {
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+                    ctx.fillRect(screenX - 0.5, screenY - 0.5, 1, 1);
+                } else {
+                    let opacity = Math.max(0, 1 - age / 200);
+                    
+                    if (i > 0) {
+                        let prev = Engine.history[i - 1];
+                        let pScreenX = map(prev.px, 0, 100, px, w - px);
+                        let pScreenY = map(prev.py, 0, 100, h - pb, pt);
+                        
+                        if (Math.abs(screenX - pScreenX) < w / 2 && Math.abs(screenY - pScreenY) < h / 2) {
+                            ctx.beginPath();
+                            ctx.moveTo(pScreenX, pScreenY); ctx.lineTo(screenX, screenY);
+                            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.4})`;
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, 1, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.6})`;
+                    ctx.fill();
+                }
+            }
+
+            let head = Engine.history[len - 1];
+            let hX = map(head.px, 0, 100, px, w - px);
+            let hY = map(head.py, 0, 100, h - pb, pt);
+            
+            ctx.beginPath();
+            ctx.arc(hX, hY, 3, 0, Math.PI * 2);
+            ctx.fillStyle = "#eab308";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#eab308";
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        function loop(timestamp) {
+            // Инициализация таймера при первом проходе
+            if (!Engine.lastTime) Engine.lastTime = timestamp;
+            
+            // Вычисление дельты времени в секундах
+            let dt = (timestamp - Engine.lastTime) / 1000;
+            Engine.lastTime = timestamp;
+
+            if (!Engine.run) {
+                requestAnimationFrame(loop);
+                return;
+            }
+
+            // Защита от гигантских прыжков при сворачивании вкладки
+            if (dt > 0.1) dt = 0.1; 
+
+            // Наполнение дробного аккумулятора
+            Engine.accumulator += Engine.yps * dt;
+            let steps = Math.floor(Engine.accumulator);
+
+            // Если накопился хотя бы 1 год — вычисляем и рендерим
+            if (steps > 0) {
+                Engine.accumulator -= steps;
+                for (let s = 0; s < steps; s++) {
+                    tickLogic();
+                }
+                renderForeground();
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        Engine.ui.slider.addEventListener('input', (e) => {
+            let val = parseInt(e.target.value);
+            // Экспоненциальное скалирование (от 10^0 до 10^4)
+            Engine.yps = Math.pow(10, val / 25);
+            Engine.ui.speedVal.innerText = formatSpeed(Engine.yps);
+        });
+
+        Engine.ui.btn.addEventListener('click', () => {
+            Engine.run = !Engine.run;
+            Engine.ui.btn.innerText = Engine.run ? "остановить поток" : "запустить поток";
+            Engine.ui.btn.className = Engine.run ? "play-btn running" : "play-btn";
+        });
+
+        window.addEventListener('resize', resize);
+
+        function boot() {
+            if (!resize()) {
+                requestAnimationFrame(boot);
+                return;
+            }
+            initTelegram();
+            tickLogic();
+            renderForeground();
+            Engine.run = false;
+            
+            // Старт постоянного петлевого опроса
+            requestAnimationFrame((timestamp) => {
+                Engine.lastTime = timestamp;
+                loop(timestamp);
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+    </script>
+</body>
+</html>
